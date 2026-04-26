@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Options Backtester — India Market Dashboard</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="backtest.css"/>
+</head>
+<body>
+
+  <header>
+    <span>🧪 Options Backtesting Engine</span>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <a href="index.html" class="backtest-tab-btn">← Dashboard</a>
+      <span id="clock"></span>
+    </div>
+  </header>
+
+  <div class="bt-container">
+
+    <!-- LEFT: Strategy Builder -->
+    <div class="bt-left">
+
+      <div class="bt-card">
+        <div class="bt-card-title">⚙️ Strategy Setup</div>
+
+        <div class="bt-field">
+          <label>Instrument</label>
+          <select id="bt-instrument">
+            <option value="NSE_INDEX|Nifty 50">Nifty 50</option>
+            <option value="NSE_INDEX|Nifty Bank">Bank Nifty</option>
+          </select>
+        </div>
+
+        <div class="bt-field">
+          <label>Option Type</label>
+          <div class="bt-toggle-group">
+            <button class="bt-toggle active" data-val="CE" onclick="setToggle(this,'opt-type')">CALL (CE)</button>
+            <button class="bt-toggle" data-val="PE" onclick="setToggle(this,'opt-type')">PUT (PE)</button>
+            <button class="bt-toggle" data-val="BOTH" onclick="setToggle(this,'opt-type')">BOTH</button>
+          </div>
+        </div>
+
+        <div class="bt-field">
+          <label>Strategy</label>
+          <select id="bt-strategy">
+            <option value="rsi">RSI Crossover (Buy &lt;30, Sell &gt;70)</option>
+            <option value="macd">MACD Crossover</option>
+            <option value="breakout">Price Breakout (High/Low)</option>
+            <option value="straddle">ATM Straddle Buy</option>
+            <option value="strangle">OTM Strangle Buy</option>
+          </select>
+        </div>
+
+        <div class="bt-field">
+          <label>Lookback Period</label>
+          <select id="bt-days">
+            <option value="7">Last 7 days</option>
+            <option value="15">Last 15 days</option>
+            <option value="30" selected>Last 30 days</option>
+          </select>
+        </div>
+
+        <div class="bt-field">
+          <label>Candle Interval</label>
+          <select id="bt-interval">
+            <option value="30minute">30 Minutes</option>
+            <option value="1hour" selected>1 Hour</option>
+            <option value="1day">1 Day</option>
+          </select>
+        </div>
+
+        <div class="bt-field">
+          <label>Capital per Trade (₹)</label>
+          <input type="number" id="bt-capital" value="50000" min="10000" step="5000"/>
+        </div>
+
+        <div class="bt-field">
+          <label>Stop Loss %</label>
+          <input type="number" id="bt-sl" value="30" min="5" max="80" step="5"/>
+        </div>
+
+        <div class="bt-field">
+          <label>Target %</label>
+          <input type="number" id="bt-target" value="50" min="10" max="200" step="5"/>
+        </div>
+
+        <button class="bt-run-btn" onclick="runBacktest()">▶ Run Backtest</button>
+      </div>
+
+      <!-- Strategy Info -->
+      <div class="bt-card" id="strategy-info">
+        <div class="bt-card-title">📖 Strategy Logic</div>
+        <div id="strategy-desc" class="bt-desc"></div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Results -->
+    <div class="bt-right">
+
+      <!-- Summary Cards -->
+      <div class="bt-summary" id="bt-summary" style="display:none;">
+        <div class="bt-stat-card">
+          <div class="bt-stat-label">Total Trades</div>
+          <div class="bt-stat-val" id="stat-trades">—</div>
+        </div>
+        <div class="bt-stat-card">
+          <div class="bt-stat-label">Win Rate</div>
+          <div class="bt-stat-val" id="stat-winrate">—</div>
+        </div>
+        <div class="bt-stat-card">
+          <div class="bt-stat-label">Net P&L</div>
+          <div class="bt-stat-val" id="stat-pnl">—</div>
+        </div>
+        <div class="bt-stat-card">
+          <div class="bt-stat-label">Max Drawdown</div>
+          <div class="bt-stat-val" id="stat-dd">—</div>
+        </div>
+        <div class="bt-stat-card">
+          <div class="bt-stat-label">Avg Profit/Trade</div>
+          <div class="bt-stat-val" id="stat-avg">—</div>
+        </div>
+        <div class="bt-stat-card">
+          <div class="bt-stat-label">Best Trade</div>
+          <div class="bt-stat-val" id="stat-best">—</div>
+        </div>
+      </div>
+
+      <!-- Equity Curve Chart -->
+      <div class="bt-card" id="bt-chart-card" style="display:none;">
+        <div class="bt-card-title">📊 Equity Curve</div>
+        <canvas id="equity-chart"></canvas>
+      </div>
+
+      <!-- Trade Log -->
+      <div class="bt-card" id="bt-log-card" style="display:none;">
+        <div class="bt-card-title">📋 Trade Log</div>
+        <div class="bt-table-wrap">
+          <table class="bt-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Entry ₹</th>
+                <th>Exit ₹</th>
+                <th>P&L ₹</th>
+                <th>Result</th>
+                <th>Exit Reason</th>
+              </tr>
+            </thead>
+            <tbody id="trade-log"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Placeholder before run -->
+      <div class="bt-placeholder" id="bt-placeholder">
+        <div>🧪</div>
+        <div>Configure your strategy on the left and click <strong>Run Backtest</strong></div>
+        <div style="font-size:12px;color:#6e7681;margin-top:8px;">Uses real historical data from Upstox API</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="upstox.js"></script>
+  <script src="backtest.js"></script>
+</body>
+</html>

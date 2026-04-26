@@ -80,49 +80,89 @@ function showSecretPrompt(callback) {
   };
 }
 
-// ─── LIVE DATA ────────────────────────────────────────────────────────────────
+// ─── LIVE DATA via WebSocket (real-time, no delay) ───────────────────────────
 let liveData = { nifty: null, sensex: null };
+let ws = null;
+
+async function startWebSocket() {
+  const token = getToken();
+  if (!token) return;
+
+  // Get WebSocket auth URL from Upstox
+  try {
+    const res  = await fetch('https://api.upstox.com/v2/feed/market-data-feed/authorize', {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }
+    });
+    const data = await res.json();
+    const wsUrl = data?.data?.authorizedRedirectUri;
+    if (!wsUrl) { fallbackToPolling(); return; }
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      // Subscribe to Nifty and Sensex
+      ws.send(JSON.stringify({
+        guid: 'market-dashboard',
+        method: 'sub',
+        data: { mode: 'ltpc', instrumentKeys: [NIFTY_KEY, SENSEX_KEY] }
+      }));
+    };
+
+    ws.onmessage = (evt) => {
+      try {
+        const feeds = JSON.parse(evt.data)?.feeds || {};
+        const nifty  = feeds[NIFTY_KEY]?.ff?.marketFF?.ltpc;
+        const sensex = feeds[SENSEX_KEY]?.ff?.marketFF?.ltpc;
+        if (nifty)  { liveData.nifty  = nifty;  updateTickerCard('nifty-ticker',  nifty,  true); }
+        if (sensex) { liveData.sensex = sensex; updateTickerCard('sensex-ticker', sensex, true); }
+        if (nifty || sensex) updatePrediction(liveData.nifty, liveData.sensex);
+      } catch { }
+    };
+
+    ws.onerror = () => fallbackToPolling();
+    ws.onclose = () => { setTimeout(startWebSocket, 5000); }; // auto-reconnect
+
+  } catch { fallbackToPolling(); }
+}
+
+// Fallback to REST polling if WebSocket fails
+function fallbackToPolling() {
+  fetchLiveQuotes();
+  setInterval(fetchLiveQuotes, 5000); // every 5 seconds
+}
 
 async function fetchLiveQuotes() {
   const token = getToken();
   if (!token) return;
-
   try {
     const res = await fetch(
       `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(NIFTY_KEY)},${encodeURIComponent(SENSEX_KEY)}`,
       { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
     );
-
     if (res.status === 401) { clearToken(); showLogin(); return; }
-
     const json = await res.json();
     const d    = json.data || {};
-
     const nifty  = d[NIFTY_KEY]  || d['NSE_INDEX:Nifty 50'];
     const sensex = d[SENSEX_KEY] || d['BSE_INDEX:SENSEX'];
-
-    if (nifty)  updateTickerCard('nifty-ticker',  nifty);
-    if (sensex) updateTickerCard('sensex-ticker', sensex);
-
-    liveData = { nifty, sensex };
+    if (nifty)  { liveData.nifty  = nifty;  updateTickerCard('nifty-ticker',  nifty); }
+    if (sensex) { liveData.sensex = sensex; updateTickerCard('sensex-ticker', sensex); }
     updatePrediction(nifty, sensex);
-
   } catch (e) { console.warn('Quote fetch error', e); }
 }
 
-function updateTickerCard(id, q) {
+function updateTickerCard(id, q, isWs = false) {
   const el = document.getElementById(id);
   if (!el) return;
-  const ltp    = q.last_price ?? q.ltp ?? 0;
-  const close  = q.ohlc?.close ?? ltp;
+  const ltp    = q.ltp ?? q.last_price ?? 0;
+  const close  = q.cp  ?? q.ohlc?.close ?? ltp;
   const change = ltp - close;
   const pct    = close ? ((change / close) * 100).toFixed(2) : '0.00';
   const color  = change >= 0 ? '#3fb950' : '#f85149';
   const arrow  = change >= 0 ? '▲' : '▼';
-
+  const dot    = isWs ? '<span style="color:#3fb950;font-size:8px">● LIVE</span>' : '';
   el.innerHTML = `
     <span class="ticker-price" style="color:${color}">${ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-    <span class="ticker-change" style="color:${color}">${arrow} ${Math.abs(change).toFixed(2)} (${Math.abs(pct)}%)</span>
+    <span class="ticker-change" style="color:${color}">${arrow} ${Math.abs(change).toFixed(2)} (${Math.abs(pct)}%) ${dot}</span>
   `;
 }
 
@@ -252,8 +292,8 @@ function showDashboard() {
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('dashboard').style.display = 'flex';
   initCharts();
-  fetchLiveQuotes();
-  setInterval(fetchLiveQuotes, 30000); // refresh every 30 seconds
+  startWebSocket();         // try real-time WebSocket first
+  fetchLiveQuotes();        // immediate first load
 }
 
 function showError(msg) {

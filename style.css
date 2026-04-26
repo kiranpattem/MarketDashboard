@@ -288,3 +288,16 @@ header {
   cursor: pointer;
 }
 .logout-btn:hover { border-color: #f85149; color: #f85149; }
+
+.backtest-tab-btn {
+  background: #1f6feb;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.backtest-tab-btn:hover { background: #388bfd; }
