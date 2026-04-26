@@ -250,7 +250,7 @@ function showLogin() {
 
 function showDashboard() {
   document.getElementById('login-overlay').style.display = 'none';
-  document.getElementById('dashboard').style.display     = 'grid';
+  document.getElementById('dashboard').style.display = 'flex';
   initCharts();
   fetchLiveQuotes();
   setInterval(fetchLiveQuotes, 30000); // refresh every 30 seconds
