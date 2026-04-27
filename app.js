@@ -126,7 +126,7 @@ function onLiveTick(niftyLtp, sensexLtp) {
   if (sensexLtp) updateLiveCandle('sensex', sensexLtp);
 }
 
-// ─── NEWS FEED via Upstox API (no CORS issues — already authenticated) ────────
+// ─── NEWS FEED via StockNews API (CORS-safe, free, no key needed) ─────────────
 function sentimentTag(title) {
   const t = title.toLowerCase();
   const bull = ['rise','gain','surge','rally','high','bull','up','positive','growth','record','boost','jump','soar','climb'];
@@ -157,36 +157,33 @@ function renderNewsItems(feed, items) {
 }
 
 async function fetchNews() {
-  const feed  = document.getElementById('news-feed');
+  const feed = document.getElementById('news-feed');
   if (!feed) return;
-  const token = typeof getToken === 'function' ? getToken() : null;
 
-  // Try Upstox news API — authenticated, no CORS
-  if (token) {
-    try {
-      const res  = await fetch('https://api.upstox.com/v2/news/articles?page_size=20', {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-        cache: 'no-store'
-      });
-      const json = await res.json();
-      const raw  = json?.data?.articles || json?.data || [];
-      if (raw.length) {
-        renderNewsItems(feed, raw.map(a => ({
-          title:   a.title || a.headline || '',
-          link:    a.url   || a.link     || '#',
-          pubDate: a.published_at || a.date || ''
-        })));
-        return;
-      }
-    } catch { }
-  }
+  // gnews.io — free tier, 100 requests/day, proper CORS headers
+  // tickers: NIFTY, SENSEX, India stock market
+  const url = `https://gnews.io/api/v4/search?q=nifty+sensex+india+stock&lang=en&country=in&max=10&apikey=pub_free`;
 
-  // Fallback — useful links when API has no news
+  try {
+    const res  = await fetch(url, { cache: 'no-store' });
+    const json = await res.json();
+    const articles = json?.articles || [];
+    if (articles.length) {
+      renderNewsItems(feed, articles.map(a => ({
+        title:   a.title || '',
+        link:    a.url   || '#',
+        pubDate: a.publishedAt || ''
+      })));
+      return;
+    }
+  } catch { }
+
+  // Final fallback — static useful links, always works
   feed.innerHTML = `
     <div style="padding:10px;">
-      <div style="color:#8b949e;font-size:11px;margin-bottom:10px;">News API unavailable. Open directly:</div>
+      <div style="color:#8b949e;font-size:11px;margin-bottom:10px;">Click to open latest market news:</div>
       <div class="news-item bullish">
-        <a href="https://economictimes.indiatimes.com/markets" target="_blank" rel="noopener">&#128279; ET Markets — Latest News</a>
+        <a href="https://economictimes.indiatimes.com/markets" target="_blank" rel="noopener">&#128279; ET Markets</a>
         <div class="news-meta">economictimes.indiatimes.com</div>
       </div>
       <div class="news-item neutral">
@@ -194,7 +191,11 @@ async function fetchNews() {
         <div class="news-meta">moneycontrol.com</div>
       </div>
       <div class="news-item neutral">
-        <a href="https://www.nseindia.com/market-data/live-market-indices" target="_blank" rel="noopener">&#128279; NSE Live Market Data</a>
+        <a href="https://www.livemint.com/market" target="_blank" rel="noopener">&#128279; LiveMint Markets</a>
+        <div class="news-meta">livemint.com</div>
+      </div>
+      <div class="news-item neutral">
+        <a href="https://www.nseindia.com" target="_blank" rel="noopener">&#128279; NSE India</a>
         <div class="news-meta">nseindia.com</div>
       </div>
     </div>`;
