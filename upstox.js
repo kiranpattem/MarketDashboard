@@ -95,9 +95,9 @@ async function startWebSocket() {
   const token = getToken();
   if (!token) return;
 
-  // Get WebSocket auth URL from Upstox
   try {
-    const res  = await fetch('https://api.upstox.com/v2/feed/market-data-feed/authorize', {
+    // Upstox updated endpoint to v3
+    const res  = await fetch('https://api.upstox.com/v3/feed/market-data-feed/authorize', {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }
     });
     const data = await res.json();
