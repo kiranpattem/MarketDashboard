@@ -117,12 +117,17 @@ async function startWebSocket() {
 
     ws.onmessage = (evt) => {
       try {
-        const feeds = JSON.parse(evt.data)?.feeds || {};
+        const feeds  = JSON.parse(evt.data)?.feeds || {};
         const nifty  = feeds[NIFTY_KEY]?.ff?.marketFF?.ltpc;
         const sensex = feeds[SENSEX_KEY]?.ff?.marketFF?.ltpc;
         if (nifty)  { liveData.nifty  = nifty;  updateTickerCard('nifty-ticker',  nifty,  true); }
         if (sensex) { liveData.sensex = sensex; updateTickerCard('sensex-ticker', sensex, true); }
-        if (nifty || sensex) updatePrediction(liveData.nifty, liveData.sensex);
+        if (nifty || sensex) {
+          updatePrediction(liveData.nifty, liveData.sensex);
+          // Update live canvas charts
+          if (typeof onLiveTick === 'function')
+            onLiveTick(nifty?.ltp ?? null, sensex?.ltp ?? null);
+        }
       } catch { }
     };
 
