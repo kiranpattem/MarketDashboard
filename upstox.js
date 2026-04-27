@@ -9,11 +9,18 @@ const NIFTY_KEY   = 'NSE_INDEX|Nifty 50';
 const SENSEX_KEY  = 'BSE_INDEX|SENSEX';
 
 // ─── TOKEN MANAGEMENT ─────────────────────────────────────────────────────────
-function getToken()          { return localStorage.getItem('upstox_token'); }
-function setToken(t)         { localStorage.setItem('upstox_token', t); }
-function clearToken()        { localStorage.removeItem('upstox_token'); }
-function getSecret()         { return localStorage.getItem('upstox_secret'); }
-function setSecret(s)        { localStorage.setItem('upstox_secret', s); }
+function getToken()  { return localStorage.getItem('upstox_token'); }
+function setToken(t) { localStorage.setItem('upstox_token', t); localStorage.setItem('upstox_token_time', Date.now()); }
+function clearToken(){ localStorage.removeItem('upstox_token'); localStorage.removeItem('upstox_token_time'); }
+function getSecret() { return localStorage.getItem('upstox_secret'); }
+function setSecret(s){ localStorage.setItem('upstox_secret', s); }
+
+// Token expires after 8 hours — auto re-login
+function isTokenExpired() {
+  const t = localStorage.getItem('upstox_token_time');
+  if (!t) return true;
+  return (Date.now() - parseInt(t)) > 8 * 60 * 60 * 1000;
+}
 
 // ─── CHECK IF RETURNING FROM OAUTH ───────────────────────────────────────────
 async function handleOAuthCallback() {
@@ -291,9 +298,26 @@ function showLogin() {
 function showDashboard() {
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('dashboard').style.display = 'flex';
-  initCharts();
-  startWebSocket();         // try real-time WebSocket first
-  fetchLiveQuotes();        // immediate first load
+
+  // Wait for TradingView to be ready before init
+  const tryInitCharts = () => {
+    if (typeof TradingView !== 'undefined') initCharts();
+    else setTimeout(tryInitCharts, 300);
+  };
+  tryInitCharts();
+
+  // Immediate data load then start WebSocket
+  fetchLiveQuotes().then(() => startWebSocket());
+
+  // Heartbeat — re-fetch every 10s as safety net if WebSocket drops
+  setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) fetchLiveQuotes();
+  }, 10000);
+
+  // Check token expiry every minute — auto redirect to login
+  setInterval(() => {
+    if (isTokenExpired()) { clearToken(); showLogin(); }
+  }, 60000);
 }
 
 function showError(msg) {
@@ -304,7 +328,7 @@ function showError(msg) {
 window.addEventListener('load', async () => {
   const isCallback = await handleOAuthCallback();
   if (!isCallback) {
-    if (getToken()) showDashboard();
-    else showLogin();
+    if (getToken() && !isTokenExpired()) showDashboard();
+    else { clearToken(); showLogin(); }
   }
 });
