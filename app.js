@@ -61,7 +61,6 @@ function drawChart(symbol) {
   ctx.fillStyle = '#0d1117';
   ctx.fillRect(0, 0, W, H);
 
-  // Grid
   ctx.strokeStyle = '#21262d'; ctx.fillStyle = '#6e7681';
   ctx.font = '10px Segoe UI'; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
@@ -71,7 +70,6 @@ function drawChart(symbol) {
     ctx.fillText(val.toFixed(0), 2, y + 4);
   }
 
-  // Candles
   candles.forEach((c, i) => {
     const x = padL + i * cW + cW * 0.1, cWidth = cW * 0.8;
     const color = c.c >= c.o ? '#3fb950' : '#f85149';
@@ -84,7 +82,6 @@ function drawChart(symbol) {
     ctx.fillRect(x, Math.min(toY(c.o), toY(c.c)), cWidth, Math.max(1, Math.abs(toY(c.c) - toY(c.o))));
   });
 
-  // Price line
   const lastClose = candles[candles.length - 1].c;
   const lineY = toY(lastClose);
   ctx.strokeStyle = state.color; ctx.lineWidth = 1;
@@ -94,7 +91,6 @@ function drawChart(symbol) {
   ctx.fillStyle = state.color; ctx.font = 'bold 11px Segoe UI';
   ctx.fillText(lastClose.toLocaleString('en-IN'), W - padR - 55, lineY - 3);
 
-  // Time labels
   ctx.fillStyle = '#6e7681'; ctx.font = '9px Segoe UI';
   [0, Math.floor(candles.length / 2), candles.length - 1].forEach(i => {
     if (!candles[i]) return;
@@ -117,15 +113,7 @@ function onLiveTick(niftyLtp, sensexLtp) {
   if (sensexLtp) updateLiveCandle('sensex', sensexLtp);
 }
 
-// ─── NEWS FEED ────────────────────────────────────────────────────────────────
-// Uses feedrapp.info — free, no API key required, CORS-safe
-const NEWS_FEEDS = [
-  'https://economictimes.indiatimes.com/markets/stocks/rss.cms',
-  'https://economictimes.indiatimes.com/markets/rss.cms',
-  'https://economictimes.indiatimes.com/news/economy/rss.cms'
-];
-let newsFeedIndex = 0;
-
+// ─── NEWS FEED via Upstox API (no CORS issues — already authenticated) ────────
 function sentimentTag(title) {
   const t = title.toLowerCase();
   const bull = ['rise','gain','surge','rally','high','bull','up','positive','growth','record','boost','jump','soar','climb'];
@@ -135,45 +123,70 @@ function sentimentTag(title) {
   return 'neutral';
 }
 
+function renderNewsItems(feed, items) {
+  feed.innerHTML = '';
+  items.forEach(item => {
+    const sentiment = sentimentTag(item.title);
+    const timeStr   = item.pubDate
+      ? new Date(item.pubDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const div = document.createElement('div');
+    div.className = `news-item ${sentiment}`;
+    div.innerHTML = `
+      <a href="${item.link}" target="_blank" rel="noopener">${item.title}</a>
+      <div class="news-meta">${timeStr} &nbsp;&middot;&nbsp; ${
+        sentiment === 'bullish' ? '&#x1F7E2; Bullish' :
+        sentiment === 'bearish' ? '&#x1F534; Bearish' : '&#x1F7E1; Neutral'}</div>`;
+    feed.appendChild(div);
+  });
+  const timeEl = document.getElementById('news-time');
+  if (timeEl) timeEl.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
 async function fetchNews() {
-  const feed = document.getElementById('news-feed');
+  const feed  = document.getElementById('news-feed');
   if (!feed) return;
+  const token = typeof getToken === 'function' ? getToken() : null;
 
-  const rssUrl = NEWS_FEEDS[newsFeedIndex % NEWS_FEEDS.length];
-  newsFeedIndex++;
-  const apiUrl = `https://feedrapp.info/?url=${encodeURIComponent(rssUrl)}&size=20&_=${Date.now()}`;
-
-  try {
-    const res   = await fetch(apiUrl, { cache: 'no-store' });
-    const data  = await res.json();
-    const items = data?.responseData?.feed?.entries || [];
-    if (!items.length) throw new Error('empty');
-
-    feed.innerHTML = '';
-    items.forEach(item => {
-      const title     = item.title || '';
-      const link      = item.link  || '#';
-      const pubDate   = item.publishedDate || '';
-      const sentiment = sentimentTag(title);
-      const timeStr   = pubDate ? new Date(pubDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
-      const div = document.createElement('div');
-      div.className = `news-item ${sentiment}`;
-      div.innerHTML = `
-        <a href="${link}" target="_blank" rel="noopener">${title}</a>
-        <div class="news-meta">${timeStr} &nbsp;&middot;&nbsp; ${
-          sentiment === 'bullish' ? '&#x1F7E2; Bullish' :
-          sentiment === 'bearish' ? '&#x1F534; Bearish' : '&#x1F7E1; Neutral'}</div>
-      `;
-      feed.appendChild(div);
-    });
-
-    const timeEl = document.getElementById('news-time');
-    if (timeEl) timeEl.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-
-  } catch {
-    const timeEl = document.getElementById('news-time');
-    if (timeEl) timeEl.textContent = 'Retrying...';
+  // Try Upstox news API — authenticated, no CORS
+  if (token) {
+    try {
+      const res  = await fetch('https://api.upstox.com/v2/news/articles?page_size=20', {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        cache: 'no-store'
+      });
+      const json = await res.json();
+      const raw  = json?.data?.articles || json?.data || [];
+      if (raw.length) {
+        renderNewsItems(feed, raw.map(a => ({
+          title:   a.title || a.headline || '',
+          link:    a.url   || a.link     || '#',
+          pubDate: a.published_at || a.date || ''
+        })));
+        return;
+      }
+    } catch { }
   }
+
+  // Fallback — useful links when API has no news
+  feed.innerHTML = `
+    <div style="padding:10px;">
+      <div style="color:#8b949e;font-size:11px;margin-bottom:10px;">News API unavailable. Open directly:</div>
+      <div class="news-item bullish">
+        <a href="https://economictimes.indiatimes.com/markets" target="_blank" rel="noopener">&#128279; ET Markets — Latest News</a>
+        <div class="news-meta">economictimes.indiatimes.com</div>
+      </div>
+      <div class="news-item neutral">
+        <a href="https://www.moneycontrol.com/news/business/markets/" target="_blank" rel="noopener">&#128279; Moneycontrol Markets</a>
+        <div class="news-meta">moneycontrol.com</div>
+      </div>
+      <div class="news-item neutral">
+        <a href="https://www.nseindia.com/market-data/live-market-indices" target="_blank" rel="noopener">&#128279; NSE Live Market Data</a>
+        <div class="news-meta">nseindia.com</div>
+      </div>
+    </div>`;
+  const timeEl = document.getElementById('news-time');
+  if (timeEl) timeEl.textContent = '';
 }
 
 fetchNews();
