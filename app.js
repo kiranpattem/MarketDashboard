@@ -162,7 +162,7 @@ async function fetchNews() {
 
   // gnews.io — free tier, 100 requests/day, proper CORS headers
   // tickers: NIFTY, SENSEX, India stock market
-  const url = `https://gnews.io/api/v4/search?q=nifty+sensex+india+stock&lang=en&country=in&max=10&apikey=pub_free`;
+  const url = `https://gnews.io/api/v4/search?q=nifty+sensex+india+stock&lang=en&country=in&max=10&apikey=0fbdb8a2a60a110a2e9ad996407f1550&_=${Date.now()}`;
 
   try {
     const res  = await fetch(url, { cache: 'no-store' });
