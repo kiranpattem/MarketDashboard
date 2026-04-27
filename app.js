@@ -45,9 +45,17 @@ function drawChart(symbol) {
   const state  = chartState[symbol];
   const canvas = document.getElementById(`${symbol}-canvas`);
   if (!canvas || !state.candles.length) return;
+
+  // Use getBoundingClientRect for reliable dimensions
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width  || 400;
+  const H = rect.height || 300;
+  canvas.width  = W;
+  canvas.height = H;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+
   const ctx = canvas.getContext('2d');
-  const W = canvas.offsetWidth, H = canvas.offsetHeight;
-  canvas.width = W; canvas.height = H;
 
   const candles = state.candles.slice(-60);
   const prices  = candles.flatMap(c => [c.h, c.l]);
@@ -102,9 +110,14 @@ function initCharts() {
   ['nifty', 'sensex'].forEach(sym => {
     const container = document.getElementById(`${sym}-chart`);
     if (!container) return;
-    container.innerHTML = `<canvas id="${sym}-canvas" style="width:100%;height:100%;display:block;"></canvas>`;
-    loadHistoricalCandles(sym);
+    container.style.position = 'relative';
+    container.innerHTML = `<canvas id="${sym}-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>`;
   });
+  // Delay to ensure DOM has rendered and flex layout is complete
+  setTimeout(() => {
+    loadHistoricalCandles('nifty');
+    loadHistoricalCandles('sensex');
+  }, 500);
   setInterval(() => { loadHistoricalCandles('nifty'); loadHistoricalCandles('sensex'); }, 30 * 60 * 1000);
 }
 
