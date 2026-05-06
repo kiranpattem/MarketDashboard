@@ -133,8 +133,8 @@ function runStrategy(candles, strategy, optionType, capital, slPct, targetPct) {
   const target = targetPct / 100;
 
   // Calculate indicators
-  const rsi          = calcRSI(closes);
-  const { macdLine, signal } = calcMACD(closes);
+  const rsi                          = calcRSI(closes);
+  const { macdLine, signal: macdSignal } = calcMACD(closes);
   const highs        = candles.map(c => c.high);
   const lows         = candles.map(c => c.low);
 
@@ -151,15 +151,17 @@ function runStrategy(candles, strategy, optionType, capital, slPct, targetPct) {
         else if (rsi[i] > 70 && (optionType === 'PE' || optionType === 'BOTH')) signal_type = 'PE';
       }
 
-      if (strategy === 'macd' && macdLine[i] !== null && signal[i] !== null) {
-        const prevM = macdLine[i - 1], prevS = signal[i - 1];
-        if (prevM < prevS && macdLine[i] > signal[i] && (optionType === 'CE' || optionType === 'BOTH')) signal_type = 'CE';
-        else if (prevM > prevS && macdLine[i] < signal[i] && (optionType === 'PE' || optionType === 'BOTH')) signal_type = 'PE';
+      if (strategy === 'macd' && macdLine[i] !== null && macdSignal[i] !== null) {
+        const prevM = macdLine[i - 1], prevS = macdSignal[i - 1];
+        if (prevM < prevS && macdLine[i] > macdSignal[i] && (optionType === 'CE' || optionType === 'BOTH')) signal_type = 'CE';
+        else if (prevM > prevS && macdLine[i] < macdSignal[i] && (optionType === 'PE' || optionType === 'BOTH')) signal_type = 'PE';
       }
 
       if (strategy === 'breakout') {
-        const prevHigh = Math.max(...highs.slice(Math.max(0, i - 5), i));
-        const prevLow  = Math.min(...lows.slice(Math.max(0, i - 5), i));
+        const hSlice   = highs.slice(Math.max(0, i - 5), i);
+        const lSlice   = lows.slice(Math.max(0, i - 5), i);
+        const prevHigh = hSlice.reduce((a, b) => a > b ? a : b, -Infinity);
+        const prevLow  = lSlice.reduce((a, b) => a < b ? a : b, Infinity);
         if (spot > prevHigh && (optionType === 'CE' || optionType === 'BOTH')) signal_type = 'CE';
         else if (spot < prevLow && (optionType === 'PE' || optionType === 'BOTH')) signal_type = 'PE';
       }
@@ -224,13 +226,14 @@ function runStrategy(candles, strategy, optionType, capital, slPct, targetPct) {
 function drawEquityCurve(trades) {
   const canvas = document.getElementById('equity-chart');
   const ctx    = canvas.getContext('2d');
-  canvas.width  = canvas.offsetWidth;
+  canvas.width  = canvas.parentElement.getBoundingClientRect().width || canvas.offsetWidth || 600;
   canvas.height = 200;
 
   const equity = [0];
   trades.forEach(t => equity.push(equity[equity.length - 1] + t.pnl));
 
-  const maxE = Math.max(...equity), minE = Math.min(...equity);
+  const maxE = equity.reduce((a, b) => a > b ? a : b, -Infinity);
+  const minE = equity.reduce((a, b) => a < b ? a : b, Infinity);
   const range = maxE - minE || 1;
   const W = canvas.width, H = canvas.height;
   const pad = 40;
@@ -314,7 +317,7 @@ async function runBacktest() {
     const netPnl    = trades.reduce((s, t) => s + t.pnl, 0);
     const winRate   = ((wins.length / trades.length) * 100).toFixed(1);
     const avgPnl    = (netPnl / trades.length).toFixed(0);
-    const bestTrade = Math.max(...trades.map(t => t.pnl));
+    const bestTrade = trades.reduce((a, t) => t.pnl > a ? t.pnl : a, -Infinity);
 
     // Max drawdown
     let peak = 0, equity = 0, maxDD = 0;
@@ -374,9 +377,12 @@ function showBtError(msg) {
   document.getElementById('bt-placeholder').innerHTML = `<div class="bt-error">⚠️ ${msg}</div>`;
 }
 
-// ─── INIT — check login ───────────────────────────────────────────────────────
+// ─── INIT — hide UI until auth confirmed to prevent flash ────────────────────
+document.body.style.visibility = 'hidden';
 window.addEventListener('load', () => {
   if (!getToken()) {
     window.location.href = 'index.html';
+  } else {
+    document.body.style.visibility = 'visible';
   }
 });

@@ -59,7 +59,8 @@ function drawChart(symbol) {
 
   const candles = state.candles.slice(-60);
   const prices  = candles.flatMap(c => [c.h, c.l]);
-  const maxP = Math.max(...prices), minP = Math.min(...prices);
+  const maxP = prices.reduce((a, b) => a > b ? a : b, -Infinity);
+  const minP = prices.reduce((a, b) => a < b ? a : b, Infinity);
   const range = maxP - minP || 1;
   const padT = 20, padB = 30, padL = 60, padR = 10;
   const cW  = (W - padL - padR) / candles.length;
@@ -126,7 +127,22 @@ function onLiveTick(niftyLtp, sensexLtp) {
   if (sensexLtp) updateLiveCandle('sensex', sensexLtp);
 }
 
-// ─── NEWS FEED via StockNews API (CORS-safe, free, no key needed) ─────────────
+// ─── NEWS FEED via gnews.io ────────────────────────────────────────────────────────────────
+// NOTE: Move this key to a backend proxy to protect free-tier quota (100 req/day)
+const GNEWS_API_KEY = '0fbdb8a2a60a110a2e9ad996407f1550';
+function sanitizeText(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function sanitizeUrl(url) {
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'https:' || u.protocol === 'http:') ? url : '#';
+  } catch { return '#'; }
+}
+
 function sentimentTag(title) {
   const t = title.toLowerCase();
   const bull = ['rise','gain','surge','rally','high','bull','up','positive','growth','record','boost','jump','soar','climb'];
@@ -145,11 +161,18 @@ function renderNewsItems(feed, items) {
       : '';
     const div = document.createElement('div');
     div.className = `news-item ${sentiment}`;
-    div.innerHTML = `
-      <a href="${item.link}" target="_blank" rel="noopener">${item.title}</a>
-      <div class="news-meta">${timeStr} &nbsp;&middot;&nbsp; ${
-        sentiment === 'bullish' ? '&#x1F7E2; Bullish' :
-        sentiment === 'bearish' ? '&#x1F534; Bearish' : '&#x1F7E1; Neutral'}</div>`;
+    const a = document.createElement('a');
+    a.href = sanitizeUrl(item.link);
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = item.title;
+    const meta = document.createElement('div');
+    meta.className = 'news-meta';
+    meta.innerHTML = `${sanitizeText(timeStr)} &nbsp;&middot;&nbsp; ${
+      sentiment === 'bullish' ? '&#x1F7E2; Bullish' :
+      sentiment === 'bearish' ? '&#x1F534; Bearish' : '&#x1F7E1; Neutral'}`;
+    div.appendChild(a);
+    div.appendChild(meta);
     feed.appendChild(div);
   });
   const timeEl = document.getElementById('news-time');
@@ -162,7 +185,7 @@ async function fetchNews() {
 
   // gnews.io — free tier, 100 requests/day, proper CORS headers
   // tickers: NIFTY, SENSEX, India stock market
-  const url = `https://gnews.io/api/v4/search?q=nifty+sensex+india+stock&lang=en&country=in&max=10&apikey=0fbdb8a2a60a110a2e9ad996407f1550&_=${Date.now()}`;
+  const url = `https://gnews.io/api/v4/search?q=nifty+sensex+india+stock&lang=en&country=in&max=10&apikey=${GNEWS_API_KEY}&_=${Date.now()}`;
 
   try {
     const res  = await fetch(url, { cache: 'no-store' });
@@ -176,7 +199,7 @@ async function fetchNews() {
       })));
       return;
     }
-  } catch { }
+  } catch (e) { console.warn('News fetch error', e); }
 
   // Final fallback — static useful links, always works
   feed.innerHTML = `

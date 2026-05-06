@@ -48,7 +48,7 @@ async function exchangeToken(code) {
     } else {
       showError('Token exchange failed. Please login again.');
     }
-  } catch { showError('Could not connect to Upstox.'); }
+  } catch (e) { console.warn('Token exchange error', e); showError('Could not connect to Upstox.'); }
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -72,6 +72,7 @@ function showSecretPrompt(callback) {
 // ─── LIVE DATA ────────────────────────────────────────────────────────────────
 let liveData = { nifty: null, sensex: null };
 let ws = null;
+let _dashboardIntervals = [];
 
 async function startWebSocket() {
   const token = getToken();
@@ -104,11 +105,11 @@ async function startWebSocket() {
           if (typeof onLiveTick === 'function')
             onLiveTick(nifty?.ltp ?? null, sensex?.ltp ?? null);
         }
-      } catch { }
+      } catch (e) { console.warn('WS message error', e); }
     };
-    ws.onerror = () => fallbackToPolling();
+    ws.onerror = (e) => { console.warn('WS error', e); fallbackToPolling(); };
     ws.onclose = () => setTimeout(startWebSocket, 5000);
-  } catch { fallbackToPolling(); }
+  } catch (e) { console.warn('WS connect error', e); fallbackToPolling(); }
 }
 
 function fallbackToPolling() {
@@ -146,9 +147,17 @@ function updateTickerCard(id, q, isWs = false) {
   const pct    = close ? ((change / close) * 100).toFixed(2) : '0.00';
   const color  = change >= 0 ? '#3fb950' : '#f85149';
   const arrow  = change >= 0 ? '&#9650;' : '&#9660;';
-  const dot    = isWs ? ' <span style="color:#3fb950;font-size:8px">&#9679; LIVE</span>' : '';
-  el.innerHTML = `<span class="ticker-price" style="color:${color}">${ltp.toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
-    <span class="ticker-change" style="color:${color}">${arrow} ${Math.abs(change).toFixed(2)} (${Math.abs(pct)}%)${dot}</span>`;
+  // Values are numeric — safe to interpolate directly, no user input involved
+  const priceSpan  = document.createElement('span');
+  priceSpan.className = 'ticker-price';
+  priceSpan.style.color = color;
+  priceSpan.textContent = ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  const changeSpan = document.createElement('span');
+  changeSpan.className = 'ticker-change';
+  changeSpan.style.color = color;
+  changeSpan.innerHTML = `${arrow} ${Math.abs(change).toFixed(2)} (${Math.abs(pct)}%)${
+    isWs ? ' <span style="color:#3fb950;font-size:8px">&#9679; LIVE</span>' : ''}`;
+  el.replaceChildren(priceSpan, changeSpan);
 }
 
 // ─── PREDICTION ───────────────────────────────────────────────────────────────
@@ -248,6 +257,10 @@ function showLogin() {
 }
 
 function showDashboard() {
+  // Clear any previously registered intervals to prevent stacking
+  _dashboardIntervals.forEach(id => clearInterval(id));
+  _dashboardIntervals = [];
+
   document.getElementById('login-overlay').style.display = 'none';
   document.getElementById('dashboard').style.display     = 'flex';
 
@@ -258,14 +271,14 @@ function showDashboard() {
   fetchLiveQuotes().then(() => startWebSocket());
 
   // Heartbeat every 10s if WebSocket drops
-  setInterval(() => {
+  _dashboardIntervals.push(setInterval(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) fetchLiveQuotes();
-  }, 10000);
+  }, 10000));
 
   // Token expiry check every minute
-  setInterval(() => {
+  _dashboardIntervals.push(setInterval(() => {
     if (isTokenExpired()) { clearToken(); showLogin(); }
-  }, 60000);
+  }, 60000));
 }
 
 function showError(msg) {

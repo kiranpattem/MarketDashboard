@@ -240,3 +240,16 @@
   color: #f85149;
   font-size: 12px;
 }
+
+/* ─── MOBILE RESPONSIVE ──────────────────────────────────────────────────────*/
+@media (max-width: 768px) {
+  .bt-container {
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  .bt-left { width: 100%; }
+
+  .bt-summary { grid-template-columns: repeat(2, 1fr); }
+}

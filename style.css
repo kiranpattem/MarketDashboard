@@ -302,3 +302,35 @@ header {
   text-decoration: none;
 }
 .backtest-tab-btn:hover { background: #388bfd; }
+
+/* ─── MOBILE RESPONSIVE ──────────────────────────────────────────────────────*/
+@media (max-width: 768px) {
+  body { overflow: auto; height: auto; max-height: none; }
+
+  header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  header > div { flex-wrap: wrap; gap: 8px; }
+
+  .grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .panel { min-height: 280px; }
+
+  #dashboard { overflow: auto; }
+
+  #nifty-ticker, #sensex-ticker { font-size: 11px; padding: 3px 7px; }
+
+  .ticker-price { font-size: 12px; }
+  .ticker-change { font-size: 10px; }
+
+  .login-box { padding: 24px 16px; }
+}
